@@ -78,7 +78,6 @@ public class ParallelStreamKMeansClustering {
             // GET NEW CENTROIDS
             for (Map.Entry<Point, Set<Point>> cluster: clusters.entrySet()) {
                 Set<Point> clusterPoints = cluster.getValue();
-                Future<Double>[] task = new Future[2];
                 Future<Double> xTask = service.submit(new XTask(clusterPoints));
                 Future<Double> yTask = service.submit(new YTask(clusterPoints));
 
