@@ -41,26 +41,26 @@ public class ParallelStreamKMeansClustering {
         	Map<Point, Set<Point>> results = app.start();
         	Utils.draw(results);
 		} catch(Exception e) {}
-
     }
 
     private final int k;
     private List<Point> points;
     private Map<Point, Set<Point>> clusters;
-    private final ExecutorService service;
+    private final ForkJoinPool service;
     private final int MAX_ITERATIONS;
 
-    public ParallelStreamKMeansClustering(final int k, List<Point> points, final int MAX_ITERATIONS, Map<Point, Set<Point>> clusters) {
+    public ParallelStreamKMeansClustering(final int k, List<Point> points, final int MAX_ITERATIONS,
+                                          Map<Point, Set<Point>> clusters) {
         this.k = k;
         this.points = points;
         this.MAX_ITERATIONS = MAX_ITERATIONS;
         this.clusters = clusters;
-        service = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());;
+        service = ForkJoinPool.commonPool();
     }
 
     public Map<Point, Set<Point>> start() throws ExecutionException, InterruptedException {
         double startTime = System.nanoTime();
-        sequentialKMeansClustering();
+        parallelStreamKMeansClustering();
         double endTime = System.nanoTime();
         double timeTaken = (endTime - startTime) / 1e6; // milliseconds
         System.out.printf("-> PARALLEL STREAM K-MEANS CLUSTERING:" +
@@ -69,8 +69,9 @@ public class ParallelStreamKMeansClustering {
         return clusters;
     }
 
-    public void sequentialKMeansClustering() throws ExecutionException, InterruptedException {
+    public void parallelStreamKMeansClustering() throws ExecutionException, InterruptedException {
         Set<Point> newCentroids = new HashSet<>();
+        List<Future<Double>[]> listTasks = new ArrayList<>();
 
         int counter = 0;
         do {
@@ -78,12 +79,15 @@ public class ParallelStreamKMeansClustering {
             // GET NEW CENTROIDS
             for (Map.Entry<Point, Set<Point>> cluster: clusters.entrySet()) {
                 Set<Point> clusterPoints = cluster.getValue();
+                Future<Double>[] task = new Future[2];
                 Future<Double> xTask = service.submit(new XTask(clusterPoints));
                 Future<Double> yTask = service.submit(new YTask(clusterPoints));
 
                 newCentroids.add(new Point(xTask.get(), yTask.get()));
             }
         } while(counter++ < MAX_ITERATIONS && hasNewCentroids(newCentroids));
+
+        service.shutdown();
     }
 
     private boolean hasNewCentroids(Set<Point> newCentroids) {
@@ -123,30 +127,30 @@ public class ParallelStreamKMeansClustering {
         }
     }
 
-    private static class XTask implements Callable<Double> {
-        Set<Point> clusterPoints;
+    private class XTask extends RecursiveTask<Double> {
+        private Set<Point> clusterPoints;
 
         public XTask(Set<Point> clusterPoints) {
             this.clusterPoints = clusterPoints;
         }
 
         @Override
-        public Double call() throws Exception {
+        protected Double compute() {
             return clusterPoints.parallelStream()
                     .mapToDouble(pt -> pt.x)
                     .reduce(0, Double::sum) / (double) clusterPoints.size();
         }
     }
 
-    private static class YTask implements Callable<Double> {
-        Set<Point> clusterPoints;
+    private class YTask extends RecursiveTask<Double> {
+        private Set<Point> clusterPoints;
 
         public YTask(Set<Point> clusterPoints) {
             this.clusterPoints = clusterPoints;
         }
 
         @Override
-        public Double call() throws Exception {
+        protected Double compute() {
             return clusterPoints.parallelStream()
                     .mapToDouble(pt -> pt.y)
                     .reduce(0, Double::sum) / (double) clusterPoints.size();
