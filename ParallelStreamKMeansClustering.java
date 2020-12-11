@@ -71,7 +71,6 @@ public class ParallelStreamKMeansClustering {
 
     public void parallelStreamKMeansClustering() throws ExecutionException, InterruptedException {
         Set<Point> newCentroids = new HashSet<>();
-        List<Future<Double>[]> listTasks = new ArrayList<>();
 
         int counter = 0;
         do {
